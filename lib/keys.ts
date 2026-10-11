@@ -53,16 +53,24 @@ export function resolveAccess(headers: Headers, env: Env = process.env): Access 
   if (own && !KEY_RE.test(own)) throw new AccessError(400, "That doesn't look like an AI Ark API key.");
   if (ownJev && !KEY_RE.test(ownJev)) throw new AccessError(400, "That doesn't look like a TypeSafe API key.");
 
+  const demo = flag(env.TIMNU_DEMO);
+  if (own) {
+    // Own-key requests aren't rate limited, so in demo mode they don't get the server's TypeSafe key either.
+    return { aiarkKey: own, jevKey: ownJev || (demo ? undefined : serverJevKey(env)), demo: false, limits: UNLIMITED };
+  }
   const jevKey = ownJev || serverJevKey(env);
-  if (own) return { aiarkKey: own, jevKey, demo: false, limits: UNLIMITED };
 
   const shared = env.AIARK_API_KEY?.trim();
   if (!shared) {
     throw new AccessError(401, "No AI Ark key. Set AIARK_API_KEY in .env.local, or paste your key in the app.");
   }
-  const demo = flag(env.TIMNU_DEMO);
   if (demo) rateLimit(clientIp(headers), Number(env.TIMNU_DEMO_REQUESTS_PER_HOUR) || 10);
   return { aiarkKey: shared, jevKey, demo, limits: demo ? demoLimits(env) : UNLIMITED };
+}
+
+/** True when this request would run on the shared demo key (used to skip work without spending the rate limit). */
+export function isSharedDemo(headers: Headers, env: Env = process.env): boolean {
+  return flag(env.TIMNU_DEMO) && !headers.get("x-aiark-key")?.trim();
 }
 
 export function describeConfig(env: Env = process.env) {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IcpSchema } from "@/lib/icp";
-import { bestEmail, cleanDomain, toLead } from "@/lib/leads";
+import { bestEmail, cleanDomain, csvCell, safeLinkedin, toLead } from "@/lib/leads";
 import { heuristicFit, scoreLeads } from "@/lib/score";
 
 const icp = IcpSchema.parse({
@@ -46,6 +46,20 @@ describe("heuristicFit", () => {
     expect(good.score).toBeGreaterThan(0.9);
     expect(bad.score).toBeLessThan(0.5);
     expect(good.source).toBe("heuristic");
+  });
+});
+
+describe("untrusted third-party values", () => {
+  it("only keeps https LinkedIn URLs", () => {
+    expect(safeLinkedin("https://www.linkedin.com/in/someone")).toBe("https://www.linkedin.com/in/someone");
+    expect(safeLinkedin("javascript:alert(1)")).toBeNull();
+    expect(safeLinkedin("https://evil.example/linkedin.com/")).toBeNull();
+  });
+
+  it("neutralizes spreadsheet formulas in CSV cells", () => {
+    expect(csvCell("=HYPERLINK(\"x\")")).toBe(`"'=HYPERLINK(""x"")"`);
+    expect(csvCell("Head of Product")).toBe('"Head of Product"');
+    expect(csvCell(0.94)).toBe('"0.94"');
   });
 });
 

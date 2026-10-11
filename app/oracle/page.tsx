@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Lead } from "@/lib/leads";
+import { csvCell, type Lead } from "@/lib/leads";
 import { SENIORITIES, SIZE_BANDS, splitList, type Seniority, type SizeBand } from "@/lib/icp";
 
 interface Config {
@@ -175,7 +175,7 @@ export default function Oracle() {
       l.fit.score, l.name, l.title, l.company.name, l.company.domain ?? "", l.company.industry,
       l.company.employees ?? "", l.location, l.linkedin ?? "", l.email?.address ?? "",
     ]);
-    const csv = [cols, ...rows].map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const csv = [cols, ...rows].map((r) => r.map(csvCell).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = `timnu-leads-page-${result.page + 1}.csv`;

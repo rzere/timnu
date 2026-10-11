@@ -58,7 +58,7 @@ Costs are AI Ark's published prices; check [their docs](https://docs.ai-ark.com)
 
 - Keys stay on the server. The browser never sees `AIARK_API_KEY` or `TYPESAFE_API_KEY`.
 - A visitor can paste their own key in the app. It's sent to this app's API routes with each request, used for that call, and never stored on the server. It's saved in the browser only if they tick "Remember on this device".
-- A request that uses a visitor's own key is never capped by demo mode.
+- A request that uses a visitor's own key is never capped by demo mode. In demo mode it also doesn't use the server's TypeSafe key: visitors bring their own for Jev scoring, or get the built-in score.
 - The API routes don't proxy arbitrary AI Ark calls. They build the filters themselves from validated answers.
 
 ### Hosting a public demo

@@ -38,6 +38,15 @@ describe("Jev key", () => {
   });
 });
 
+describe("demo mode and the server TypeSafe key", () => {
+  it("doesn't lend the server's TypeSafe key to unmetered own-key requests", () => {
+    const env = { AIARK_API_KEY: "server_key_123", TYPESAFE_API_KEY: "ts_server_1", TIMNU_DEMO: "1" };
+    expect(resolveAccess(h({ "x-aiark-key": "visitor_key_456" }), env).jevKey).toBeUndefined();
+    expect(resolveAccess(h({ "x-aiark-key": "visitor_key_456", "x-typesafe-key": "ts_visitor_1" }), env).jevKey).toBe("ts_visitor_1");
+    expect(resolveAccess(h({ "x-aiark-key": "visitor_key_456" }), { ...env, TIMNU_DEMO: "" }).jevKey).toBe("ts_server_1");
+  });
+});
+
 describe("rateLimit", () => {
   it("allows N requests per hour per client", () => {
     const t = 1_000_000;

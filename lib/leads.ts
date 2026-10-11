@@ -44,7 +44,7 @@ export function toLead(p: AiArkPerson, masked: boolean): Omit<Lead, "fit"> {
     headline: profile.headline ?? "",
     seniority: p.department?.seniority ?? "",
     location: p.location?.short ?? p.location?.default ?? "",
-    linkedin: p.link?.linkedin ?? null,
+    linkedin: safeLinkedin(p.link?.linkedin),
     company: {
       name: c.summary?.name ?? "",
       domain: cleanDomain(c.link?.domain ?? c.link?.website),
@@ -53,6 +53,18 @@ export function toLead(p: AiArkPerson, masked: boolean): Omit<Lead, "fit"> {
       description: (c.summary?.description ?? "").slice(0, 600),
     },
   };
+}
+
+/** Third-party data is rendered as a link, so accept only https LinkedIn URLs. */
+export function safeLinkedin(url?: string | null): string | null {
+  return url && /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\//i.test(url) ? url : null;
+}
+
+/** Neutralizes spreadsheet formulas in exported cells (CSV injection). */
+export function csvCell(v: unknown): string {
+  let s = String(v ?? "");
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return `"${s.replaceAll('"', '""')}"`;
 }
 
 export function bestEmail(outputs: AiArkEmail[] | undefined): Lead["email"] {

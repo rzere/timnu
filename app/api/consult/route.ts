@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     const { leads, jevError } = await scoreLeads(
       icp,
       result.content.map((p) => toLead(p, !unmask)),
-      access.gatewayKey,
+      access.jevKey,
     );
     if (jevError) notices.push(`Jev scoring was unavailable (${jevError}), so Timnu used her built-in score.`);
 
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       leads,
       companyIds,
       spent,
-      jev: !!access.gatewayKey && !jevError,
+      jev: !!access.jevKey && !jevError,
       demo: access.demo,
       notices,
     });

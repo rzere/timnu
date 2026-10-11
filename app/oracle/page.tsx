@@ -40,7 +40,7 @@ const SENIORITY_LABEL: Partial<Record<Seniority, string>> = { c_suite: "C-suite"
 
 export default function Oracle() {
   const [config, setConfig] = useState<Config | null>(null);
-  const [keys, setKeys] = useState({ aiark: "", gateway: "" });
+  const [keys, setKeys] = useState({ aiark: "", typesafe: "" });
   const [remember, setRemember] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
   const [answers, setAnswers] = useState<Answers>(EMPTY);
@@ -54,9 +54,9 @@ export default function Oracle() {
   useEffect(() => {
     fetch("/api/config").then((r) => r.json()).then(setConfig).catch(() => setConfig(null));
     try {
-      const saved = JSON.parse(localStorage.getItem(STORE) ?? "null") as typeof keys | null;
+      const saved = JSON.parse(localStorage.getItem(STORE) ?? "null") as { aiark?: string; typesafe?: string } | null;
       if (saved) {
-        setKeys(saved);
+        setKeys({ aiark: saved.aiark ?? "", typesafe: saved.typesafe ?? "" });
         setRemember(true);
       }
     } catch {
@@ -80,7 +80,7 @@ export default function Oracle() {
   const headers = useMemo(() => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
     if (keys.aiark.trim()) h["x-aiark-key"] = keys.aiark.trim();
-    if (keys.gateway.trim()) h["x-gateway-key"] = keys.gateway.trim();
+    if (keys.typesafe.trim()) h["x-typesafe-key"] = keys.typesafe.trim();
     return h;
   }, [keys]);
 
@@ -226,10 +226,10 @@ export default function Oracle() {
                   className="input"
                   type="password"
                   autoComplete="off"
-                  placeholder="AI Gateway key for Jev (optional)"
-                  value={keys.gateway}
-                  onChange={(e) => setKeys({ ...keys, gateway: e.target.value })}
-                  aria-label="Vercel AI Gateway key"
+                  placeholder="TypeSafe key for Jev scoring (optional)"
+                  value={keys.typesafe}
+                  onChange={(e) => setKeys({ ...keys, typesafe: e.target.value })}
+                  aria-label="TypeSafe API key"
                 />
               </div>
               <label className="check">

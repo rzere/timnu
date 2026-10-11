@@ -1,6 +1,6 @@
 /**
  * Where keys come from:
- *  - Self-hosted / open source: AIARK_API_KEY (and optionally AI_GATEWAY_API_KEY) in .env.local.
+ *  - Self-hosted / open source: AIARK_API_KEY (and optionally TYPESAFE_API_KEY for Jev) in .env.local.
  *  - Public hosted deployment: the same env vars hold a shared demo key, and TIMNU_DEMO=1
  *    caps what anonymous visitors can spend.
  *  - Any visitor may paste their own AI Ark key in the app (sent per request in a header,
@@ -9,7 +9,8 @@
 
 export interface Access {
   aiarkKey: string;
-  gatewayKey?: string;
+  /** TypeSafe API key for Jev scoring. */
+  jevKey?: string;
   /** True when the request runs on the deployment's shared key under demo limits. */
   demo: boolean;
   limits: DemoLimits;
@@ -48,12 +49,12 @@ export class AccessError extends Error {
 
 export function resolveAccess(headers: Headers, env: Env = process.env): Access {
   const own = headers.get("x-aiark-key")?.trim();
-  const ownGateway = headers.get("x-gateway-key")?.trim();
+  const ownJev = headers.get("x-typesafe-key")?.trim();
   if (own && !KEY_RE.test(own)) throw new AccessError(400, "That doesn't look like an AI Ark API key.");
-  if (ownGateway && !KEY_RE.test(ownGateway)) throw new AccessError(400, "That doesn't look like an AI Gateway key.");
+  if (ownJev && !KEY_RE.test(ownJev)) throw new AccessError(400, "That doesn't look like a TypeSafe API key.");
 
-  const gatewayKey = ownGateway || env.AI_GATEWAY_API_KEY || undefined;
-  if (own) return { aiarkKey: own, gatewayKey, demo: false, limits: UNLIMITED };
+  const jevKey = ownJev || serverJevKey(env);
+  if (own) return { aiarkKey: own, jevKey, demo: false, limits: UNLIMITED };
 
   const shared = env.AIARK_API_KEY?.trim();
   if (!shared) {
@@ -61,16 +62,21 @@ export function resolveAccess(headers: Headers, env: Env = process.env): Access 
   }
   const demo = flag(env.TIMNU_DEMO);
   if (demo) rateLimit(clientIp(headers), Number(env.TIMNU_DEMO_REQUESTS_PER_HOUR) || 10);
-  return { aiarkKey: shared, gatewayKey, demo, limits: demo ? demoLimits(env) : UNLIMITED };
+  return { aiarkKey: shared, jevKey, demo, limits: demo ? demoLimits(env) : UNLIMITED };
 }
 
 export function describeConfig(env: Env = process.env) {
   return {
     serverKey: !!env.AIARK_API_KEY?.trim(),
-    jev: !!env.AI_GATEWAY_API_KEY?.trim(),
+    jev: !!serverJevKey(env),
     demo: flag(env.TIMNU_DEMO),
     limits: flag(env.TIMNU_DEMO) ? { ...demoLimits(env) } : null,
   };
+}
+
+/** TYPESAFE_API_KEY, with AI_GATEWAY_API_KEY accepted as a legacy name for the same TypeSafe key. */
+function serverJevKey(env: Env): string | undefined {
+  return env.TYPESAFE_API_KEY?.trim() || env.AI_GATEWAY_API_KEY?.trim() || undefined;
 }
 
 function clientIp(headers: Headers): string {

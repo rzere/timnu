@@ -27,6 +27,17 @@ describe("resolveAccess", () => {
   });
 });
 
+describe("Jev key", () => {
+  it("reads TYPESAFE_API_KEY, accepts AI_GATEWAY_API_KEY as a legacy name, and lets a visitor's key win", () => {
+    expect(resolveAccess(h(), { AIARK_API_KEY: "server_key_123", TYPESAFE_API_KEY: "ts_server_1" }).jevKey).toBe("ts_server_1");
+    expect(resolveAccess(h(), { AIARK_API_KEY: "server_key_123", AI_GATEWAY_API_KEY: "ts_legacy_1" }).jevKey).toBe("ts_legacy_1");
+    expect(
+      resolveAccess(h({ "x-typesafe-key": "ts_visitor_1" }), { AIARK_API_KEY: "server_key_123", TYPESAFE_API_KEY: "ts_server_1" }).jevKey,
+    ).toBe("ts_visitor_1");
+    expect(resolveAccess(h(), { AIARK_API_KEY: "server_key_123" }).jevKey).toBeUndefined();
+  });
+});
+
 describe("rateLimit", () => {
   it("allows N requests per hour per client", () => {
     const t = 1_000_000;

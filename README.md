@@ -30,7 +30,7 @@ Your key lives in `.env.local`, which is git-ignored. Never commit it.
 
 1. **The questions:** what you sell, who signs the check (titles and seniority), what kind of companies, how big, and where. Optionally, up to 5 of your best customers' domains.
 2. **Consult:** Timnu turns the answers into AI Ark filters and runs a **People Preview**: 25 matching people for 1 credit, with last names masked. If you gave customer domains, she first runs a **lookalike company search** and only looks at people in those companies.
-3. **Rank:** every lead gets a fit score. With an AI Gateway key, [Jev](https://vercel.com/changelog/ai-gateway-now-supports-typesafe-clients-and-http-api-for-jev) (`typesafe-ai/jev`) answers "is this a likely buyer?" as a probability. Without one, a free built-in score compares titles, seniority, company size and industry.
+3. **Rank:** every lead gets a fit score. With a [TypeSafe](https://docs.typesafe.ai/introduction) API key, Jev answers three yes/no questions per lead (is this person a buyer for your offer, would their company need it, do they match your profile) and Timnu weights them 50/30/20 into one fit score. Without a key, a free built-in score compares titles, seniority, company size and industry.
 4. **Reveal what's worth it:** reveal one lead's full profile and verified email (1 credit, only if an email is found), or unmask the whole page's names and LinkedIn URLs (0.5 credits per person). Download the page as CSV.
 
 | Action | AI Ark credits |
@@ -47,7 +47,7 @@ Costs are AI Ark's published prices; check [their docs](https://docs.ai-ark.com)
 | Variable | Required | What it does |
 |---|---|---|
 | `AIARK_API_KEY` | yes* | Your AI Ark key. *Or leave it unset and paste a key in the app's **Keys** panel. |
-| `AI_GATEWAY_API_KEY` | no | Vercel AI Gateway key for Jev fit scoring. Falls back to the built-in score. |
+| `TYPESAFE_API_KEY` | no | [TypeSafe](https://console.typesafe.ai/keys) key for Jev fit scoring. Falls back to the built-in score. `AI_GATEWAY_API_KEY` is also read as a legacy name for the same key. |
 | `TIMNU_DEMO` | no | `1` for a public deployment running on a shared key: caps what anonymous visitors can spend. |
 | `TIMNU_DEMO_MAX_PAGES` | no | Pages per search in demo mode (default `2`). |
 | `TIMNU_DEMO_ALLOW_REVEAL` | no | `1` to allow email reveal and unmasking in demo mode (default off). |
@@ -56,7 +56,7 @@ Costs are AI Ark's published prices; check [their docs](https://docs.ai-ark.com)
 
 ### Keys and privacy
 
-- Keys stay on the server. The browser never sees `AIARK_API_KEY` or `AI_GATEWAY_API_KEY`.
+- Keys stay on the server. The browser never sees `AIARK_API_KEY` or `TYPESAFE_API_KEY`.
 - A visitor can paste their own key in the app. It's sent to this app's API routes with each request, used for that call, and never stored on the server. It's saved in the browser only if they tick "Remember on this device".
 - A request that uses a visitor's own key is never capped by demo mode.
 - The API routes don't proxy arbitrary AI Ark calls. They build the filters themselves from validated answers.

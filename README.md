@@ -15,7 +15,7 @@
 
 ## Quickstart (bring your own key)
 
-You need Node 20+ and an [AI Ark](https://ai-ark.com) API key. Free accounts get 100 credits a month; create a key in the [API dashboard](https://app.ai-ark.com/settings/api-management/dashboard).
+You need Node 22+ and an [AI Ark](https://ai-ark.com) API key. Free accounts get 100 credits a month; create a key in the [API dashboard](https://app.ai-ark.com/settings/api-management/dashboard).
 
 ```bash
 git clone https://github.com/rzere/timnu && cd timnu

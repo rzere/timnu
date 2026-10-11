@@ -39,7 +39,6 @@ iPad questions ──► ICP (Jev choice) ──► find companies / people (Per
   - Open source: bring your own `AI_GATEWAY_API_KEY` (Jev) and `PERSONENRICH_API_KEY`.
   - Hosted version: works out of the box.
 
-The API feasibility notes and requests to the PersonEnrich team are in [`docs/personenrich-requests.md`](docs/personenrich-requests.md).
 
 ## License
 

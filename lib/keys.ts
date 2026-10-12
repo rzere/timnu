@@ -20,19 +20,30 @@ export interface DemoLimits {
   maxPages: number;
   allowReveal: boolean;
   allowLookalikes: boolean;
+  /** Top-ranked leads per consult to reveal automatically (name, LinkedIn, verified email). */
+  autoReveal: number;
 }
-
-const UNLIMITED: DemoLimits = { maxPages: Infinity, allowReveal: true, allowLookalikes: true };
 
 type Env = Record<string, string | undefined>;
 
 const flag = (v?: string) => v === "1" || v?.toLowerCase() === "true";
+
+/** A whole number in [0, 25]; falls back when unset or invalid. */
+const count = (v: string | undefined, fallback: number) => {
+  const n = v === undefined || v.trim() === "" ? NaN : Number(v);
+  return Number.isInteger(n) ? Math.min(25, Math.max(0, n)) : fallback;
+};
+
+export function fullLimits(env: Env = process.env): DemoLimits {
+  return { maxPages: Infinity, allowReveal: true, allowLookalikes: true, autoReveal: count(env.TIMNU_AUTO_REVEAL, 10) };
+}
 
 export function demoLimits(env: Env = process.env): DemoLimits {
   return {
     maxPages: Math.max(1, Number(env.TIMNU_DEMO_MAX_PAGES) || 2),
     allowReveal: flag(env.TIMNU_DEMO_ALLOW_REVEAL),
     allowLookalikes: flag(env.TIMNU_DEMO_ALLOW_LOOKALIKES),
+    autoReveal: count(env.TIMNU_DEMO_AUTO_REVEAL, 5),
   };
 }
 
@@ -56,7 +67,7 @@ export function resolveAccess(headers: Headers, env: Env = process.env): Access 
   const demo = flag(env.TIMNU_DEMO);
   if (own) {
     // Own-key requests aren't rate limited, so in demo mode they don't get the server's TypeSafe key either.
-    return { aiarkKey: own, jevKey: ownJev || (demo ? undefined : serverJevKey(env)), demo: false, limits: UNLIMITED };
+    return { aiarkKey: own, jevKey: ownJev || (demo ? undefined : serverJevKey(env)), demo: false, limits: fullLimits(env) };
   }
   const jevKey = ownJev || serverJevKey(env);
 
@@ -65,7 +76,7 @@ export function resolveAccess(headers: Headers, env: Env = process.env): Access 
     throw new AccessError(401, "No AI Ark key. Set AIARK_API_KEY in .env.local, or paste your key in the app.");
   }
   if (demo) rateLimit(clientIp(headers), Number(env.TIMNU_DEMO_REQUESTS_PER_HOUR) || 10);
-  return { aiarkKey: shared, jevKey, demo, limits: demo ? demoLimits(env) : UNLIMITED };
+  return { aiarkKey: shared, jevKey, demo, limits: demo ? demoLimits(env) : fullLimits(env) };
 }
 
 /** True when this request would run on the shared demo key (used to skip work without spending the rate limit). */
@@ -79,6 +90,8 @@ export function describeConfig(env: Env = process.env) {
     jev: !!serverJevKey(env),
     demo: flag(env.TIMNU_DEMO),
     limits: flag(env.TIMNU_DEMO) ? { ...demoLimits(env) } : null,
+    /** Leads revealed per consult on the server key, and with a visitor's own key. */
+    autoReveal: { server: flag(env.TIMNU_DEMO) ? demoLimits(env).autoReveal : fullLimits(env).autoReveal, own: fullLimits(env).autoReveal },
   };
 }
 

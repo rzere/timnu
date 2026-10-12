@@ -29,13 +29,14 @@ Your key lives in `.env.local`, which is git-ignored. Never commit it.
 ## How it works
 
 1. **The questions:** what you sell, who signs the check (titles and seniority), what kind of companies, how big, and where. Optionally, up to 5 of your best customers' domains.
-2. **Consult:** Timnu turns the answers into AI Ark filters and runs a **People Preview**: 25 matching people for 1 credit, with last names masked. If you gave customer domains, she first runs a **lookalike company search** and only looks at people in those companies.
+2. **Consult:** Timnu turns the answers into AI Ark filters and finds 25 matching people for 1 credit. If you gave customer domains, she first runs a **lookalike company search** and only looks at people in those companies.
 3. **Rank:** every lead gets a fit score. With a [TypeSafe](https://docs.typesafe.ai/introduction) API key, Jev answers three yes/no questions per lead (is this person a buyer for your offer, would their company need it, do they match your profile) and Timnu weights them 50/30/20 into one fit score. Without a key, a free built-in score compares titles, seniority, company size and industry.
-4. **Reveal what's worth it:** reveal one lead's full profile and verified email (1 credit, only if an email is found), or unmask the whole page's names and LinkedIn URLs (0.5 credits per person). Download the page as CSV.
+4. **Contact details:** the top-ranked leads (10 by default) are revealed automatically with full name, LinkedIn and a verified email. AI Ark charges 1 credit per email it finds and nothing when it finds none, so you only pay for leads you can contact. Leads you can contact are listed first. You can reveal more one by one, unmask a whole page's names and LinkedIn URLs (0.5 credits per person), or download the page as CSV.
 
 | Action | AI Ark credits |
 |---|---|
-| Consult / next page (25 people, names masked) | 1 |
+| Consult / next page (25 matches) | 1 |
+| Auto-reveal top leads (name, LinkedIn, verified email) | 1 per email found, up to `TIMNU_AUTO_REVEAL` |
 | Lookalike search (50 companies, first page only) | up to 5 |
 | Reveal email for one lead | 1 if found, 0 if not |
 | Unmask a page (25 people) | 12.5 |
@@ -48,9 +49,11 @@ Costs are AI Ark's published prices; check [their docs](https://docs.ai-ark.com)
 |---|---|---|
 | `AIARK_API_KEY` | yes* | Your AI Ark key. *Or leave it unset and paste a key in the app's **Keys** panel. |
 | `TYPESAFE_API_KEY` | no | [TypeSafe](https://console.typesafe.ai/keys) key for Jev fit scoring. Falls back to the built-in score. `AI_GATEWAY_API_KEY` is also read as a legacy name for the same key. |
+| `TIMNU_AUTO_REVEAL` | no | Top leads revealed per consult (default `10`, max `25`). `0` turns it off. |
 | `TIMNU_DEMO` | no | `1` for a public deployment running on a shared key: caps what anonymous visitors can spend. |
 | `TIMNU_DEMO_MAX_PAGES` | no | Pages per search in demo mode (default `2`). |
-| `TIMNU_DEMO_ALLOW_REVEAL` | no | `1` to allow email reveal and unmasking in demo mode (default off). |
+| `TIMNU_DEMO_AUTO_REVEAL` | no | Top leads revealed per consult in demo mode (default `5`). |
+| `TIMNU_DEMO_ALLOW_REVEAL` | no | `1` to also let demo visitors reveal more leads by hand and unmask pages (default off). |
 | `TIMNU_DEMO_ALLOW_LOOKALIKES` | no | `1` to allow lookalike search in demo mode (default off). |
 | `TIMNU_DEMO_REQUESTS_PER_HOUR` | no | Per-IP request limit in demo mode (default `10`). |
 

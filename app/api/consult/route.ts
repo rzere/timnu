@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { COST, createAiArk } from "@/lib/aiark";
+import { AiArkError, COST, createAiArk, type AiArk } from "@/lib/aiark";
 import { IcpSchema, toAccountFilters, toPeopleFilters } from "@/lib/icp";
-import { toLead } from "@/lib/leads";
-import { scoreLeads } from "@/lib/score";
+import { bestEmail, toLead, type Lead } from "@/lib/leads";
+import { mapLimit, scoreLeads } from "@/lib/score";
 import { AccessError, resolveAccess } from "@/lib/keys";
 import { fail, json } from "@/lib/http";
 
@@ -65,6 +65,13 @@ export async function POST(req: Request) {
     );
     if (jevError) notices.push(`Jev scoring was unavailable (${jevError}), so Timnu used her built-in score.`);
 
+    // A lead is someone you can contact: reveal the best-ranked ones (name, LinkedIn, verified email).
+    const revealed = await revealTop(aiark, leads, access.limits.autoReveal);
+    spent += revealed.found * COST.emailFound;
+    if (revealed.problem) notices.push(revealed.problem);
+    // Contactable leads first, then by fit.
+    leads.sort((a, b) => Number(!!b.email) - Number(!!a.email) || b.fit.score - a.fit.score);
+
     return json({
       total: result.totalElements,
       page,
@@ -74,9 +81,38 @@ export async function POST(req: Request) {
       spent,
       jev: !!access.jevKey && !jevError,
       demo: access.demo,
+      contactable: revealed.found,
       notices,
     });
   } catch (e) {
     return fail(e);
   }
+}
+
+/**
+ * Looks up the top `n` leads with Export Single Person: full profile + verified email,
+ * 1 credit per email found and nothing when none is. Mutates the leads in place.
+ */
+async function revealTop(aiark: AiArk, leads: Lead[], n: number) {
+  let found = 0;
+  let problem: string | undefined;
+  let stop = false;
+  // AI Ark allows ~5 requests/second per key, so keep a few in flight.
+  await mapLimit(leads.slice(0, n), 3, async (lead) => {
+    if (stop) return;
+    try {
+      const person = await aiark.revealPerson(lead.id);
+      const email = bestEmail(person?.email?.output);
+      if (person && email) {
+        Object.assign(lead, toLead(person, false), { email });
+        found++;
+      } else {
+        lead.email = null;
+      }
+    } catch (e) {
+      if (e instanceof AiArkError && (e.status === 402 || e.status === 401)) stop = true;
+      problem ??= `Some contacts couldn't be revealed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  });
+  return { found, problem };
 }

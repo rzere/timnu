@@ -17,6 +17,7 @@ export interface Lead {
     description: string;
   };
   fit: Fit;
+  /** undefined = not looked up yet; null = looked up, no verified email (and nothing was charged). */
   email?: { address: string; type: string; generic: boolean } | null;
 }
 

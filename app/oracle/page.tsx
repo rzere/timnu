@@ -9,6 +9,7 @@ interface Config {
   jev: boolean;
   demo: boolean;
   limits: { maxPages: number; allowReveal: boolean; allowLookalikes: boolean } | null;
+  autoReveal?: { server: number; own: number };
 }
 
 interface Consultation {
@@ -21,6 +22,7 @@ interface Consultation {
   jev: boolean;
   demo?: boolean;
   notices: string[];
+  contactable: number;
   unmasked: boolean;
 }
 
@@ -49,7 +51,7 @@ export default function Oracle() {
   const [error, setError] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
   const [spent, setSpent] = useState(0);
-  const [revealed, setRevealed] = useState<Record<string, "none" | "busy">>({});
+  const [revealing, setRevealing] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/config").then((r) => r.json()).then(setConfig).catch(() => setConfig(null));
@@ -130,7 +132,7 @@ export default function Oracle() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "The oracle is silent.");
       setResult({ ...(j as Consultation), unmasked: unmask });
-      setRevealed({});
+      setRevealing({});
       charge(j.spent ?? 0);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
@@ -141,30 +143,24 @@ export default function Oracle() {
   }
 
   async function reveal(lead: Lead) {
-    setRevealed((m) => ({ ...m, [lead.id]: "busy" }));
+    setRevealing((m) => ({ ...m, [lead.id]: true }));
     setError(null);
     try {
       const r = await fetch("/api/reveal", { method: "POST", headers, body: JSON.stringify({ id: lead.id }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Could not reveal.");
-      if (!j.found) {
-        setRevealed((m) => ({ ...m, [lead.id]: "none" }));
-        return;
-      }
-      setRevealed((m) => {
-        const { [lead.id]: _done, ...rest } = m;
-        return rest;
-      });
       setResult((res) =>
-        res && { ...res, leads: res.leads.map((l) => (l.id === lead.id ? { ...l, ...j.lead, fit: l.fit } : l)) },
+        res && {
+          ...res,
+          contactable: res.contactable + (j.found ? 1 : 0),
+          leads: res.leads.map((l) => (l.id !== lead.id ? l : j.found ? { ...l, ...j.lead, fit: l.fit } : { ...l, email: null })),
+        },
       );
       charge(j.spent ?? 0);
     } catch (e) {
-      setRevealed((m) => {
-        const { [lead.id]: _failed, ...rest } = m;
-        return rest;
-      });
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRevealing((m) => ({ ...m, [lead.id]: false }));
     }
   }
 
@@ -186,6 +182,49 @@ export default function Oracle() {
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const ready = answers.offer.trim() && splitList(answers.titles).length > 0 && (config?.serverKey || ownKey);
   const lookalikeCount = canLookalike ? splitList(answers.lookalikes).length : 0;
+  const revealBudget = (ownKey ? config?.autoReveal?.own : config?.autoReveal?.server) ?? 10;
+  const contactable = result?.leads.filter((l) => l.email) ?? [];
+  const others = result?.leads.filter((l) => !l.email) ?? [];
+
+  function renderLead(l: Lead) {
+    return (
+      <li className="lead" key={l.id}>
+        <span className="avatar" aria-hidden>{l.name.charAt(0)}</span>
+        <div className="who">
+          <div className="name">
+            {l.linkedin ? <a href={l.linkedin} target="_blank" rel="noopener noreferrer">{l.name}</a> : l.name}
+            {l.masked && !l.email && <span className="masked">name hidden until revealed</span>}
+          </div>
+          <div className="role">{l.title || l.headline}{l.company.name && <> · <b>{l.company.name}</b></>}</div>
+          <div className="meta">
+            {[l.location, l.company.industry, l.company.employees != null && `${l.company.employees.toLocaleString("en-US")} employees`, l.company.domain]
+              .filter(Boolean).join(" · ")}
+          </div>
+          {l.fit.reasons.length > 0 && <div className="why">{l.fit.reasons.join(" · ")}</div>}
+          {l.email && (
+            <div className="email">
+              ✉ <a href={`mailto:${l.email.address}`}>{l.email.address}</a>
+              {l.email.type === "CATCH_ALL" ? " (catch-all)" : ""}
+              {l.linkedin && <> · <a href={l.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></>}
+            </div>
+          )}
+          {l.email === null && <div className="why">No verified email found. Nothing was charged.</div>}
+        </div>
+        <div className="side">
+          <span className={`fit ${l.fit.score >= 0.75 ? "hi" : l.fit.score >= 0.5 ? "mid" : "lo"}`}
+            title={l.fit.source === "jev" ? "Scored by Jev" : "Built-in score"}>
+            fit {l.fit.score.toFixed(2)}{l.fit.source === "jev" ? " · Jev" : ""}
+          </span>
+          {l.email === undefined && canReveal && (
+            <button className="btn ghost small" disabled={revealing[l.id]} onClick={() => void reveal(l)}
+              title="Full profile + verified email. 1 credit only if an email is found.">
+              {revealing[l.id] ? "Revealing…" : "Reveal contact"}
+            </button>
+          )}
+        </div>
+      </li>
+    );
+  }
 
   return (
     <>
@@ -193,7 +232,7 @@ export default function Oracle() {
         <a className="brand" href="/">timnu</a>
         <div className="topbar-right">
           {credits !== null && <span className="pill" title="AI Ark credits left">{fmt(credits)} credits</span>}
-          {spent > 0 && <span className="pill" title="Spent this session">−{fmt(spent)} this session</span>}
+          {spent > 0 && !demo && <span className="pill" title="Spent this session">−{fmt(spent)} this session</span>}
           {demo && <span className="pill">demo</span>}
           <button className="pill" onClick={() => setShowKeys((s) => !s)} aria-expanded={showKeys}>
             {ownKey ? "Your keys ✓" : "Keys"}
@@ -324,7 +363,9 @@ export default function Oracle() {
                     {busy === "consult" ? <span className="spinner" aria-hidden /> : "🔮"} Consult Timnu
                   </button>
                   <span className="cost">
-                    {demo ? "Free in the demo." : `Costs 1 AI Ark credit${lookalikeCount ? " + about 5 for lookalikes" : ""}.`}
+                    {demo
+                      ? "Free in the demo."
+                      : `Up to ${1 + revealBudget} AI Ark credits: 1 to search, 1 per lead with a verified email${lookalikeCount ? ", about 5 for lookalikes" : ""}.`}
                   </span>
                 </div>
                 {error && <p className="notice error" role="alert">{error}</p>}
@@ -339,9 +380,11 @@ export default function Oracle() {
                 <div>
                   <h2>The cane has spoken.</h2>
                   <p className="sub">
-                    {result.total
-                      ? `${result.total.toLocaleString("en-US")} people in that direction. Here are page ${result.page + 1}'s ${result.leads.length}, best fit first.`
-                      : "Nobody in that direction. Try broader titles, fewer filters, or another region."}
+                    {!result.total
+                      ? "Nobody in that direction. Try broader titles, fewer filters, or another region."
+                      : contactable.length
+                        ? `${plural(contactable.length, "lead")} you can contact now, best fit first. ${result.total.toLocaleString("en-US")} people match in total.`
+                        : `${result.total.toLocaleString("en-US")} people match, but none of the top ones had a verified email. Try the next page or broaden your answers.`}
                   </p>
                 </div>
               </div>
@@ -363,39 +406,13 @@ export default function Oracle() {
                 {result.leads.length > 0 && <button className="btn ghost small" onClick={downloadCsv}>Download CSV</button>}
               </div>
 
-              <ul className="leads">
-                {result.leads.map((l) => (
-                  <li className="lead" key={l.id}>
-                    <span className="avatar" aria-hidden>{l.name.charAt(0)}</span>
-                    <div className="who">
-                      <div className="name">
-                        {l.linkedin ? <a href={l.linkedin} target="_blank" rel="noopener noreferrer">{l.name}</a> : l.name}
-                        {l.masked && !l.email && <span className="masked">name masked</span>}
-                      </div>
-                      <div className="role">{l.title || l.headline}{l.company.name && <> · <b>{l.company.name}</b></>}</div>
-                      <div className="meta">
-                        {[l.location, l.company.industry, l.company.employees != null && `${l.company.employees.toLocaleString("en-US")} employees`, l.company.domain]
-                          .filter(Boolean).join(" · ")}
-                      </div>
-                      {l.fit.reasons.length > 0 && <div className="why">{l.fit.reasons.join(" · ")}</div>}
-                      {l.email && <div className="email">✉ {l.email.address}{l.email.type === "CATCH_ALL" ? " (catch-all)" : ""}</div>}
-                      {revealed[l.id] === "none" && <div className="why">No verified email found. Nothing was charged.</div>}
-                    </div>
-                    <div className="side">
-                      <span className={`fit ${l.fit.score >= 0.75 ? "hi" : l.fit.score >= 0.5 ? "mid" : "lo"}`}
-                        title={l.fit.source === "jev" ? "Scored by Jev" : "Built-in score"}>
-                        fit {l.fit.score.toFixed(2)}{l.fit.source === "jev" ? " · Jev" : ""}
-                      </span>
-                      {!l.email && canReveal && revealed[l.id] !== "none" && (
-                        <button className="btn ghost small" disabled={revealed[l.id] === "busy"} onClick={() => void reveal(l)}
-                          title="Full profile + verified email. 1 credit only if an email is found.">
-                          {revealed[l.id] === "busy" ? "Revealing…" : "Reveal email"}
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              {contactable.length > 0 && <ul className="leads">{contactable.map(renderLead)}</ul>}
+              {others.length > 0 && (
+                <details className="more" open={contactable.length === 0}>
+                  <summary>{plural(others.length, "more match", "more matches")} without a verified contact yet</summary>
+                  <ul className="leads">{others.map(renderLead)}</ul>
+                </details>
+              )}
 
               {result.totalPages > 1 && (
                 <div className="pager">
@@ -422,5 +439,6 @@ export default function Oracle() {
   );
 }
 
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));

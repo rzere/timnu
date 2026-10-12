@@ -13,7 +13,7 @@ describe("resolveAccess", () => {
   it("caps the shared key in demo mode", () => {
     const a = resolveAccess(h({ "x-forwarded-for": "10.0.0.1" }), { AIARK_API_KEY: "server_key_123", TIMNU_DEMO: "1" });
     expect(a.demo).toBe(true);
-    expect(a.limits).toEqual({ maxPages: 2, allowReveal: false, allowLookalikes: false });
+    expect(a.limits).toEqual({ maxPages: 2, allowReveal: false, allowLookalikes: false, autoReveal: 5 });
   });
 
   it("prefers a visitor's own key and lifts demo caps", () => {
@@ -44,6 +44,18 @@ describe("demo mode and the server TypeSafe key", () => {
     expect(resolveAccess(h({ "x-aiark-key": "visitor_key_456" }), env).jevKey).toBeUndefined();
     expect(resolveAccess(h({ "x-aiark-key": "visitor_key_456", "x-typesafe-key": "ts_visitor_1" }), env).jevKey).toBe("ts_visitor_1");
     expect(resolveAccess(h({ "x-aiark-key": "visitor_key_456" }), { ...env, TIMNU_DEMO: "" }).jevKey).toBe("ts_server_1");
+  });
+});
+
+describe("auto-reveal budget", () => {
+  it("defaults to 10 (own or server key) and 5 in demo, clamped to 0..25", () => {
+    expect(resolveAccess(h(), { AIARK_API_KEY: "server_key_123" }).limits.autoReveal).toBe(10);
+    expect(resolveAccess(h(), { AIARK_API_KEY: "server_key_123", TIMNU_AUTO_REVEAL: "0" }).limits.autoReveal).toBe(0);
+    expect(resolveAccess(h(), { AIARK_API_KEY: "server_key_123", TIMNU_AUTO_REVEAL: "99" }).limits.autoReveal).toBe(25);
+    expect(resolveAccess(h(), { AIARK_API_KEY: "server_key_123", TIMNU_AUTO_REVEAL: "lots" }).limits.autoReveal).toBe(10);
+    const demo = { AIARK_API_KEY: "server_key_123", TIMNU_DEMO: "1", TIMNU_DEMO_AUTO_REVEAL: "3" };
+    expect(resolveAccess(h({ "x-forwarded-for": "10.9.9.9" }), demo).limits.autoReveal).toBe(3);
+    expect(resolveAccess(h({ "x-aiark-key": "visitor_key_456" }), demo).limits.autoReveal).toBe(10);
   });
 });
 

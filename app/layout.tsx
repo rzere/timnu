@@ -9,6 +9,13 @@ export const metadata: Metadata = {
   title: "Timnu — the oracle of recurring revenue",
   description,
   openGraph: { title: "Timnu — the oracle of recurring revenue", description, type: "website", images: [image] },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
   twitter: { card: "summary_large_image", title: "Timnu — the oracle of recurring revenue", description, images: [image] },
 };
 

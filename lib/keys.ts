@@ -58,7 +58,11 @@ export class AccessError extends Error {
   }
 }
 
-export function resolveAccess(headers: Headers, env: Env = process.env): Access {
+/**
+ * `bucket` separates rate limits: "unlock" is one request per star collected, so in demo mode it
+ * allows (requests per hour × stars per run), the same credit ceiling as before.
+ */
+export function resolveAccess(headers: Headers, env: Env = process.env, bucket: "default" | "unlock" = "default"): Access {
   const own = headers.get("x-aiark-key")?.trim();
   const ownJev = headers.get("x-typesafe-key")?.trim();
   if (own && !KEY_RE.test(own)) throw new AccessError(400, "That doesn't look like an AI Ark API key.");
@@ -75,7 +79,10 @@ export function resolveAccess(headers: Headers, env: Env = process.env): Access 
   if (!shared) {
     throw new AccessError(401, "No AI Ark key. Set AIARK_API_KEY in .env.local, or paste your key in the app.");
   }
-  if (demo) rateLimit(clientIp(headers), Number(env.TIMNU_DEMO_REQUESTS_PER_HOUR) || 10);
+  if (demo) {
+    const perHour = Number(env.TIMNU_DEMO_REQUESTS_PER_HOUR) || 10;
+    rateLimit(`${bucket}:${clientIp(headers)}`, bucket === "unlock" ? perHour * Math.max(1, demoLimits(env).autoReveal) : perHour);
+  }
   return { aiarkKey: shared, jevKey, demo, limits: demo ? demoLimits(env) : fullLimits(env) };
 }
 

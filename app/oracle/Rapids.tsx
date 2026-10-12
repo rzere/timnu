@@ -6,10 +6,23 @@ import {
   type Input, type Obstacle, type State, type Star,
 } from "@/lib/rapids";
 
+export interface UnlockToast {
+  key: number;
+  status: "pending" | "found" | "none";
+  label?: string;
+}
+
 interface Props {
   /** Stars on the course: one lead each. */
   stars: number;
-  onClaim: (stars: number) => void;
+  /** Called the moment a star is collected, so its lead unlocks while you keep paddling. */
+  onStar: () => void;
+  /** Recent unlocks, shown as toasts over the river. */
+  toasts: UnlockToast[];
+  /** Unlocks still on their way. */
+  pending: number;
+  /** Leave the game and show the leads. */
+  onFinish: () => void;
   /** Offered only when skipping is allowed (e.g. your own key). */
   onSkip?: () => void;
 }
@@ -17,7 +30,7 @@ interface Props {
 type Phase = "ready" | "playing" | "done";
 
 /** The Rapids: paddle to Timnu's island and collect a star for every lead you want. */
-export default function Rapids({ stars, onClaim, onSkip }: Props) {
+export default function Rapids({ stars, onStar, toasts, pending, onFinish, onSkip }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef<State | null>(null);
   const inputRef = useRef<Input>({ dir: 0, targetX: null });
@@ -26,9 +39,15 @@ export default function Rapids({ stars, onClaim, onSkip }: Props) {
   const [phase, setPhase] = useState<Phase>("ready");
   const [hud, setHud] = useState({ stars: 0, lives: LIVES, progress: 0 });
   const [result, setResult] = useState<{ stars: number; how: "island" | "capsized" } | null>(null);
+  /** Stars on the current course, fixed when the run starts (`stars` is what's available now). */
+  const [runStars, setRunStars] = useState(stars);
   const best = useRef(0);
+  const onStarRef = useRef(onStar);
+  onStarRef.current = onStar;
 
   const start = useCallback(() => {
+    if (stars <= 0) return;
+    setRunStars(stars);
     stateRef.current = startState(createWorld(stars, (Math.random() * 2 ** 31) | 0));
     fxRef.current = { shake: 0, flash: 0, sparkles: [] };
     inputRef.current = { dir: 0, targetX: null };
@@ -40,7 +59,7 @@ export default function Rapids({ stars, onClaim, onSkip }: Props) {
 
   // Draw the idle river behind the start screen.
   useEffect(() => {
-    if (phase !== "ready") return;
+    if (phase !== "ready" || stars <= 0) return;
     stateRef.current = startState(createWorld(stars, 7));
     const ctx = setupCanvas(canvasRef.current);
     if (ctx) draw(ctx, stateRef.current, fxRef.current, 0);
@@ -66,7 +85,10 @@ export default function Rapids({ stars, onClaim, onSkip }: Props) {
         fx.shake = 0.35;
         fx.flash = 0.25;
       }
-      if (s.event === "star") fx.sparkles.push(...burst(s.x, KAYAK_Y - 10));
+      if (s.event === "star") {
+        fx.sparkles.push(...burst(s.x, KAYAK_Y - 10));
+        onStarRef.current();
+      }
       fx.shake = Math.max(0, fx.shake - dt);
       fx.flash = Math.max(0, fx.flash - dt);
       fx.sparkles = fx.sparkles.filter((p) => (p.life -= dt) > 0);
@@ -125,7 +147,7 @@ export default function Rapids({ stars, onClaim, onSkip }: Props) {
       <div className="rapids-hud" aria-live="off">
         <span aria-label={`${hud.lives} lives`}>{"♥".repeat(hud.lives)}<span className="lost">{"♥".repeat(LIVES - hud.lives)}</span></span>
         <span className="track" aria-hidden><i style={{ width: `${hud.progress * 100}%` }} /><b style={{ left: `${hud.progress * 100}%` }}>🛶</b><em>🏝️</em></span>
-        <span aria-label={`${hud.stars} of ${stars} stars`}>★ {hud.stars}/{stars}</span>
+        <span aria-label={`${hud.stars} of ${runStars} stars`}>★ {hud.stars}/{runStars}</span>
       </div>
       <div className="rapids-stage">
         <canvas
@@ -146,11 +168,21 @@ export default function Rapids({ stars, onClaim, onSkip }: Props) {
           onPointerCancel={() => { inputRef.current.targetX = null; }}
         />
 
+        {toasts.length > 0 && (
+          <ul className="rapids-toasts" aria-live="polite">
+            {toasts.slice(-3).map((t) => (
+              <li key={t.key} className={t.status}>
+                {t.status === "pending" ? "★ Unlocking a lead…" : t.status === "found" ? `🔓 ${t.label} unlocked` : "No verified email there. Nothing charged."}
+              </li>
+            ))}
+          </ul>
+        )}
+
         {phase === "ready" && (
           <div className="rapids-overlay">
             <h2>The Rapids</h2>
             <p>Timnu pointed the way. Now paddle to her island.</p>
-            <p>Collect <b>★ {stars}</b> {stars === 1 ? "star" : "stars"}: each one unlocks a lead with name, LinkedIn and verified email. Dodge rocks, logs and the banks. You have three lives.</p>
+            <p>Collect <b>★ {stars}</b> {stars === 1 ? "star" : "stars"}: each one unlocks a lead (name, LinkedIn, verified email) the moment you grab it. Dodge rocks, logs and the banks. You have three lives.</p>
             <p className="keys-help">← → or A / D to steer · on a phone, drag your finger</p>
             <button className="btn primary" onClick={start} autoFocus>🛶 Paddle!</button>
             {onSkip && <button className="btn ghost small" onClick={onSkip}>Skip the rapids</button>}
@@ -160,22 +192,27 @@ export default function Rapids({ stars, onClaim, onSkip }: Props) {
         {phase === "done" && result && (
           <div className="rapids-overlay">
             <h2>{result.how === "island" ? "You reached the island!" : "Capsized!"}</h2>
-            <p className="stars-won" aria-label={`${result.stars} of ${stars} stars`}>
-              {"★".repeat(result.stars)}<span className="lost">{"★".repeat(Math.max(0, stars - result.stars))}</span>
+            <p className="stars-won" aria-label={`${result.stars} of ${runStars} stars`}>
+              {"★".repeat(result.stars)}<span className="lost">{"★".repeat(Math.max(0, runStars - result.stars))}</span>
             </p>
             <p>
               {result.stars === 0
                 ? "No stars this time. Timnu only reveals leads to those who earn them."
-                : `${result.stars} ${result.stars === 1 ? "star" : "stars"}: ${result.stars} ${result.stars === 1 ? "lead" : "leads"} to unlock.`}
-              {result.stars < stars && " Paddle again to try for more."}
+                : `${result.stars} ${result.stars === 1 ? "lead" : "leads"} unlocked${pending ? `, ${pending} still arriving` : ""}.`}
+              {stars > 0 && " Paddle again to unlock more."}
             </p>
             <div className="rapids-actions">
-              {result.stars > 0 && (
-                <button className="btn primary" onClick={() => onClaim(result.stars)} autoFocus>
-                  Unlock {result.stars} {result.stars === 1 ? "lead" : "leads"}
-                </button>
+              {result.stars > 0 ? (
+                <>
+                  <button className="btn primary big" onClick={onFinish} autoFocus>See your leads →</button>
+                  {stars > 0 && <button className="btn ghost" onClick={start}>↻ Paddle again</button>}
+                </>
+              ) : (
+                <>
+                  {stars > 0 && <button className="btn primary big" onClick={start} autoFocus>↻ Paddle again</button>}
+                  <button className="btn ghost" onClick={onFinish}>Back to the list</button>
+                </>
               )}
-              <button className="btn ghost" onClick={start} autoFocus={result.stars === 0}>↻ Paddle again</button>
             </div>
           </div>
         )}

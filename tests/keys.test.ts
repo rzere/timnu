@@ -59,6 +59,17 @@ describe("auto-reveal budget", () => {
   });
 });
 
+describe("unlock bucket", () => {
+  it("allows one unlock request per star, separately from consults", () => {
+    const env = { AIARK_API_KEY: "server_key_123", TIMNU_DEMO: "1", TIMNU_DEMO_REQUESTS_PER_HOUR: "1", TIMNU_DEMO_AUTO_REVEAL: "3" };
+    const ip = h({ "x-forwarded-for": "10.7.7.7" });
+    resolveAccess(ip, env); // the consult
+    expect(() => resolveAccess(ip, env)).toThrow(AccessError);
+    for (let i = 0; i < 3; i++) resolveAccess(ip, env, "unlock"); // three stars
+    expect(() => resolveAccess(ip, env, "unlock")).toThrow(AccessError);
+  });
+});
+
 describe("rateLimit", () => {
   it("allows N requests per hour per client", () => {
     const t = 1_000_000;

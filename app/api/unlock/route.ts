@@ -11,7 +11,7 @@ export const maxDuration = 60;
 const Body = z.object({
   /** Lead ids from a consult, best fit first, that haven't been looked up yet. */
   ids: z.array(z.string().uuid()).max(25),
-  /** Stars collected in the rapids: one contact each, capped by the deployment's reveal budget. */
+  /** Stars to cash in (the game sends one per star as it's collected), capped by the reveal budget. */
   stars: z.number().int().min(0).max(25),
 });
 
@@ -22,7 +22,7 @@ const Body = z.object({
  */
 export async function POST(req: Request) {
   try {
-    const access = resolveAccess(req.headers);
+    const access = resolveAccess(req.headers, process.env, "unlock");
     const { ids, stars } = Body.parse(await req.json());
     const want = Math.min(stars, access.limits.autoReveal);
     const aiark = createAiArk(access.aiarkKey);

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { csvCell, type Lead } from "@/lib/leads";
 import { SENIORITIES, SIZE_BANDS, splitList, type Seniority, type SizeBand } from "@/lib/icp";
+import Rapids from "./Rapids";
 
 interface Config {
   serverKey: boolean;
@@ -52,6 +53,8 @@ export default function Oracle() {
   const [credits, setCredits] = useState<number | null>(null);
   const [spent, setSpent] = useState(0);
   const [revealing, setRevealing] = useState<Record<string, boolean>>({});
+  /** True while the player is on the rapids, earning stars to unlock leads. */
+  const [paddling, setPaddling] = useState(false);
 
   useEffect(() => {
     fetch("/api/config").then((r) => r.json()).then(setConfig).catch(() => setConfig(null));
@@ -133,8 +136,41 @@ export default function Oracle() {
       if (!r.ok) throw new Error(j.error ?? "The oracle is silent.");
       setResult({ ...(j as Consultation), unmasked: unmask });
       setRevealing({});
+      setPaddling((j as Consultation).leads.length > 0);
       charge(j.spent ?? 0);
       window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Trades stars from the rapids for contacts: the best-ranked locked leads, one per star. */
+  async function unlock(stars: number) {
+    if (!result) return;
+    setPaddling(false);
+    setError(null);
+    setBusy("unlock");
+    try {
+      const ids = result.leads.filter((l) => l.email === undefined).map((l) => l.id);
+      const r = await fetch("/api/unlock", { method: "POST", headers, body: JSON.stringify({ ids, stars }) });
+      const j = (await r.json()) as { leads?: Lead[]; noEmail?: string[]; spent?: number; notice?: string; error?: string };
+      if (!r.ok) throw new Error(j.error ?? "Timnu couldn't unlock those leads.");
+      const found = new Map((j.leads ?? []).map((l) => [l.id, l]));
+      const missed = new Set(j.noEmail ?? []);
+      setResult((res) =>
+        res && {
+          ...res,
+          notices: j.notice ? [...res.notices, j.notice] : res.notices,
+          leads: res.leads.map((l) => {
+            const f = found.get(l.id);
+            if (f) return { ...l, ...f, fit: l.fit, starred: true };
+            return missed.has(l.id) ? { ...l, email: null } : l;
+          }),
+        },
+      );
+      charge(j.spent ?? 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -185,6 +221,8 @@ export default function Oracle() {
   const revealBudget = (ownKey ? config?.autoReveal?.own : config?.autoReveal?.server) ?? 10;
   const contactable = result?.leads.filter((l) => l.email) ?? [];
   const others = result?.leads.filter((l) => !l.email) ?? [];
+  const locked = others.filter((l) => l.email === undefined).length;
+  const starsForRun = Math.min(revealBudget, locked);
 
   function renderLead(l: Lead) {
     return (
@@ -193,7 +231,8 @@ export default function Oracle() {
         <div className="who">
           <div className="name">
             {l.linkedin ? <a href={l.linkedin} target="_blank" rel="noopener noreferrer">{l.name}</a> : l.name}
-            {l.masked && !l.email && <span className="masked">name hidden until revealed</span>}
+            {l.starred && <span className="starred" title="Unlocked in the rapids">★</span>}
+            {l.masked && !l.email && <span className="masked">locked · paddle to unlock</span>}
           </div>
           <div className="role">{l.title || l.headline}{l.company.name && <> · <b>{l.company.name}</b></>}</div>
           <div className="meta">
@@ -372,19 +411,33 @@ export default function Oracle() {
               </div>
             </form>
           </>
+        ) : paddling && starsForRun > 0 ? (
+          <section className="tablet" aria-label="The Rapids">
+            <div className="screen">
+              <Rapids stars={starsForRun} onClaim={(n) => void unlock(n)} onSkip={demo ? undefined : () => void unlock(starsForRun)} />
+              <p className="cost" style={{ marginTop: 10, textAlign: "center" }}>
+                {result.total.toLocaleString("en-US")} people match. Timnu ranked the best {result.leads.length}; your stars unlock them in order.
+                {" "}<button className="linklike" onClick={() => setPaddling(false)}>See the locked list</button>
+              </p>
+            </div>
+          </section>
         ) : (
           <section className="tablet" aria-label="Leads">
             <div className="screen">
               <div className="verdict">
                 <span className="compass" aria-hidden />
                 <div>
-                  <h2>The cane has spoken.</h2>
+                  <h2>{busy === "unlock" ? "Timnu is writing their names in the sand…" : "The cane has spoken."}</h2>
                   <p className="sub">
                     {!result.total
                       ? "Nobody in that direction. Try broader titles, fewer filters, or another region."
-                      : contactable.length
-                        ? `${plural(contactable.length, "lead")} you can contact now, best fit first. ${result.total.toLocaleString("en-US")} people match in total.`
-                        : `${result.total.toLocaleString("en-US")} people match, but none of the top ones had a verified email. Try the next page or broaden your answers.`}
+                      : busy === "unlock"
+                        ? "Revealing the leads your stars unlocked."
+                        : contactable.length
+                          ? `${plural(contactable.length, "lead")} you can contact now, best fit first. ${result.total.toLocaleString("en-US")} people match in total.`
+                          : locked
+                            ? `${result.total.toLocaleString("en-US")} people match. Paddle the rapids to unlock them.`
+                            : `${result.total.toLocaleString("en-US")} people match, but none of the top ones had a verified email. Try the next page or broaden your answers.`}
                   </p>
                 </div>
               </div>
@@ -394,6 +447,11 @@ export default function Oracle() {
 
               <div className="toolbar">
                 <button className="btn ghost small" onClick={() => setResult(null)}>← Edit answers</button>
+                {locked > 0 && (
+                  <button className="btn primary small" disabled={!!busy} onClick={() => setPaddling(true)}>
+                    🛶 {contactable.length ? "Paddle again to unlock more" : "Paddle to unlock leads"}
+                  </button>
+                )}
                 {!result.unmasked && canReveal && result.leads.length > 0 && (
                   <button className="btn ghost small" disabled={!!busy}
                     onClick={() => {
